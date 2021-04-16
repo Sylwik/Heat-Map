@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heat Map</title>
+    <link rel="preconnect" href="https://fonts.gstatic.com">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@100&display=swap" rel="stylesheet">
+</head>
+<style>
+    body{
+        display: flex;
+        align-items: center;
+        flex-direction: column;
+        background-image: url(http://studiumorganistowskie.archidiecezja.wroc.pl/wp-content/uploads/2018/02/White-Wallpaper-For-Pc.jpg);
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: cover;
+        font-family: 'Roboto', sans-serif;
+    }
+    .cell:hover {
+        stroke: black;
+        stroke-width: 2;
+    }
+    #tooltip {	
+        position: absolute;			
+        text-align: center;			
+        width: auto;					
+        height: auto;					
+        padding: 10px;				
+        font: 12px sans-serif;		
+        background: lightsteelblue;	
+        border: 0px;		
+        border-radius: 8px;			
+        pointer-events: none;			
+    }
+    h1{
+        text-align: center;	
+    }
+    h2{
+        text-align: center;	
+        margin: 0;
+    }
+    #legend{
+        margin: 20px;
+    }
+  </style>
+<body>
+    <h1 id="title">Monthly Global Land-Surface Temperature</h1>
+    <h2 id="description">1753 - 2015: base temperature 8.66&#730;</h2>
+    <div id="chart-container"></div>
+    <div id="legend"></div>
+    <script src="https://d3js.org/d3.v6.min.js"></script>
+    <script>
+        const req = new XMLHttpRequest();
+        req.open("GET",'https://raw.githubusercontent.com/freeCodeCamp/ProjectReferenceData/master/global-temperature.json',true);
+        req.send();
+         req.onload = function(){
+             const json = JSON.parse(req.responseText);
+
+             const w = 1500;
+             const h = 550;
+             const paddingW = 100;
+             const paddingH = 40;
+
+             const month = ["January","February","March","April","May","June","July", "August","September","October","November","December"];
+             const dataset = [];
+             for(let i = 0; i < json["monthlyVariance"].length; i++){
+                 dataset.push([ json["monthlyVariance"][i]["year"], json["monthlyVariance"][i]["month"], parseFloat((json["baseTemperature"] + json["monthlyVariance"][i]["variance"]).toFixed(1)), parseFloat(json["monthlyVariance"][i]["variance"].toFixed(1)) ]);
+             }
+
+             const xScale = d3.scaleLinear()
+                        .domain([d3.min(dataset, (d) => d[0]), d3.max(dataset, (d) => d[0])])
+                        .range([paddingW, w - paddingW]);
+             const yScale = d3.scaleLinear()
+                        .domain([d3.max(dataset, (d) => d[1])+0.5, d3.min(dataset, (d) => d[1])-0.5])
+                        .range([h - paddingH, paddingH]);
+
+             const svg = d3.select(document.getElementById("chart-container"))
+                   .append("svg")
+                   .attr("width", w)
+                   .attr("height", h);
+
+             var div = d3.select("body").append("div")	
+                         .attr("class", "tooltip")				
+                         .style("opacity", 0);
+
+             svg.selectAll("rect")
+                 .data(dataset)
+                 .enter()
+                 .append("rect")
+                 .attr("class", "cell")
+                 .attr("data-month", (d) => d[1]-1)
+                 .attr("data-year", (d) => d[0])
+                 .attr("data-temp", (d) => d[2])
+                 .attr("x", function(d, i) {
+                     return i * ((w - 2*paddingW) / dataset.length) + paddingW;
+                 })
+                 .attr("y", (d) => yScale(d[1]-0.5))
+                 .attr("width", ((w - 2*paddingW) / (dataset.length/12)))
+                 .attr("height", (d) => (h - 2*paddingH)/12)
+                 .attr("fill", function(d){
+                            return "hsl(" + (230 - d[2]*15) + ", 100%, 50%)";  
+                 })
+                 .on("mouseover", function(e, d) {	
+                     div.transition()
+                     .attr("id", "tooltip")
+                     .attr("data-year", d[0])
+                     .duration(200)		
+                     .style("opacity", 1);	
+                     div.html(d[0] + " - " + month[d[1]-1] + "<br/>" + d[2] + "<br/>" + d[3])
+                     .style("left", e.pageX-50 + "px")		
+                     .style("top", e.pageY - 80 + "px");	
+                 })					
+                 .on("mouseout", function() {		
+                     div.transition()		
+                     .duration(500)		
+                     .style("opacity", 0);	
+                 });
+
+             const xAxis = d3.axisBottom(xScale).tickFormat(d3.format("d")).ticks(dataset.length/120);
+             const yAxis = d3.axisLeft(yScale)
+                            .tickFormat(function(d, i){  
+                                return month[11-i];
+                            });
+
+             svg.append("g")
+                 .attr("transform", "translate(0," + (h - paddingH) + ")")
+                 .attr("id", "x-axis")
+                 .call(xAxis)
+                 .style("font-size","16px");
+             svg.append("g")
+                .attr("transform", "translate(" + paddingW + ",0)")
+                .attr("id", "y-axis")
+                .call(yAxis)
+                .style("font-size","18px");
+
+
+            const legendScale = d3.scaleLinear()
+                        .domain([1, 14])
+                        .range([0, (w/2)]);
+            
+            console.log(d3.min(dataset, (d) => d[3]));
+            console.log(d3.max(dataset, (d) => d[3]));
+            console.log(d3.min(dataset, (d) => d[2]));
+            console.log(d3.max(dataset, (d) => d[2]));
+            const diff = 15*(d3.min(dataset, (d) => d[2])-d3.max(dataset, (d) => d[2]));
+            
+            const legendSVG = d3.select(document.getElementById("legend"))
+                   .append("svg")
+                   .attr("width", (w/2) + 40)
+                   .attr("height", 70);
+            legendSVG.selectAll("rect")
+                 .data(dataset)
+                 .enter()
+                 .append("rect")
+                 .attr("x", (d, i) => 20 + i * ((w/2)/dataset.length))
+                 .attr("y", 0)
+                 .attr("width", (w/2)/dataset.length)
+                 .attr("height", 40)
+                 .attr("fill", function(d, i){
+                     
+                            return "hsl(" + ( 230 - 15 * d3.min(dataset, (d) => d[2]) + i * (diff / dataset.length) ) + ", 100%, 50%)";
+                 })
+                 .attr("id", "scale");
+            
+            const legendAxis = d3.axisBottom(legendScale).ticks(14);
+
+            legendSVG.append("g")
+                .attr("transform", "translate(20, 40)")
+                .call(legendAxis).style("font-size","18px");
+        }
+    </script>
+    <script src="https://cdn.freecodecamp.org/testable-projects-fcc/v1/bundle.js"></script>
+</body>
+</html>
